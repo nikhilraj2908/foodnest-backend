@@ -11,6 +11,7 @@ import { User } from "./models/User.js";
 import authRoutes from "./routes/auth.js";
 import adminRoutes from "./routes/admin.js";
 
+
 const app = express();
 
 // --- Middlewares ---

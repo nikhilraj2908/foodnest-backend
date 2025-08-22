@@ -3,6 +3,7 @@ import express from "express";
 import { auth, requireRole } from "../middleware/auth.js";
 import { RegistrationRequest } from "../models/RegistrationRequest.js";
 import User from "../models/User.js"; // default export in your project
+import bcrypt from "bcryptjs";
 
 const router = express.Router();
 
@@ -133,6 +134,41 @@ router.delete("/users/:id", auth, requireRole("superadmin"), async (req, res) =>
     res.json({ ok: true });
   } catch (err) {
     console.error("Delete user error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+
+router.post("/users", auth, requireRole("superadmin"), async (req, res) => {
+  try {
+    const { name, email, role, password } = req.body;
+    if (!name || !email || !role || !password) {
+      return res.status(400).json({ error: "name, email, role, password required" });
+    }
+
+    const ROLES = new Set(["superadmin", "rider", "cook", "supervisor", "refill"]);
+    if (!ROLES.has(role)) return res.status(400).json({ error: "Invalid role" });
+
+    const exists = await User.findOne({ email });
+    if (exists) return res.status(409).json({ error: "Email already in use" });
+
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(password, salt);
+
+    const user = await User.create({ name, email, role, passwordHash });
+
+    res.status(201).json({
+      ok: true,
+      user: {
+        id: String(user._id),
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        status: user.disabled ? "Inactive" : "Active",
+      },
+    });
+  } catch (err) {
+    console.error("Create user error:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
