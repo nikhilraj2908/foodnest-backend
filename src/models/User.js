@@ -24,12 +24,8 @@ const UserSchema = new mongoose.Schema(
     allowances: { type: Number, default: undefined },
     deductions: { type: Number, default: undefined },
     taxId: { type: String, trim: true, default: undefined },
-    bank: {
-      holder: { type: String, trim: true, default: undefined },
-      account: { type: String, trim: true, default: undefined },
-      bankName: { type: String, trim: true, default: undefined },
-      ifsc: { type: String, trim: true, default: undefined },
-    },
+    // Store bank details encrypted in bankEnc; do not keep plaintext in documents
+    bankEnc: { type: String, default: undefined },
     notes: { type: String, trim: true, default: undefined },
   },
   { timestamps: true }

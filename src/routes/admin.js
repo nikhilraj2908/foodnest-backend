@@ -3,6 +3,7 @@ import express from "express";
 import { auth, requireRole } from "../middleware/auth.js";
 import { RegistrationRequest } from "../models/RegistrationRequest.js";
 import User from "../models/User.js"; // default export in your project
+import { encryptJson, decryptJson, maskAccountNumber } from "../utils/crypto.js";
 import bcrypt from "bcryptjs";
 
 const router = express.Router();
@@ -174,6 +175,7 @@ router.get("/users/:id", auth, requireRole("superadmin"), async (req, res) => {
   try {
     const user = await User.findById(req.params.id, { passwordHash: 0 }).lean();
     if (!user) return res.status(404).json({ error: "Not found" });
+    const bank = decryptJson(user.bankEnc);
     res.json({
       id: String(user._id),
       name: user.name,
@@ -191,7 +193,7 @@ router.get("/users/:id", auth, requireRole("superadmin"), async (req, res) => {
       allowances: user.allowances,
       deductions: user.deductions,
       taxId: user.taxId,
-      bank: user.bank,
+      bank,
       notes: user.notes,
     });
   } catch (err) {
@@ -226,6 +228,11 @@ router.patch("/users/:id", auth, requireRole("superadmin"), async (req, res) => 
     const updates = {};
     for (const k of ALLOW) if (k in req.body) updates[k] = req.body[k];
     const normalized = normalizeUserPayload(updates);
+    // Move bank to bankEnc if present
+    const { bank, ...rest } = normalized;
+    if (bank) {
+      rest.bankEnc = encryptJson(bank);
+    }
 
     // Optional: very light role validation
     const ROLES = new Set(["superadmin", "rider", "cook", "supervisor", "refill"]);
@@ -235,7 +242,7 @@ router.patch("/users/:id", auth, requireRole("superadmin"), async (req, res) => 
 
     const user = await User.findByIdAndUpdate(
       req.params.id,
-      normalized,
+      rest,
       { new: true, runValidators: true, projection: { passwordHash: 0 } }
     ).lean();
 
@@ -261,7 +268,7 @@ router.patch("/users/:id", auth, requireRole("superadmin"), async (req, res) => 
         allowances: user.allowances,
         deductions: user.deductions,
         taxId: user.taxId,
-        bank: user.bank,
+        bank: decryptJson(user.bankEnc),
         notes: user.notes,
       },
     });
@@ -343,7 +350,8 @@ router.post("/users", auth, requireRole("superadmin"), async (req, res) => {
     // Remove undefined keys to avoid overwriting defaults
     Object.keys(payroll).forEach((k) => payroll[k] === undefined && delete payroll[k]);
 
-    const user = await User.create({ name, email, role, passwordHash, ...payroll });
+    const { bank: bankPlain, ...rest } = payroll;
+    const user = await User.create({ name, email, role, passwordHash, ...rest, bankEnc: bankPlain ? encryptJson(bankPlain) : undefined });
 
     res.status(201).json({
       ok: true,
@@ -364,7 +372,7 @@ router.post("/users", auth, requireRole("superadmin"), async (req, res) => {
         allowances: user.allowances,
         deductions: user.deductions,
         taxId: user.taxId,
-        bank: user.bank,
+        bank: decryptJson(user.bankEnc),
         notes: user.notes,
       },
     });
