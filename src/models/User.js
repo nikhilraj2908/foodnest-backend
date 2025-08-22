@@ -26,3 +26,4 @@ UserSchema.methods.verifyPassword = async function (plain) {
 
 export const User = mongoose.model("User", UserSchema);
 export const ROLE_ENUM = roles;
+export default User;
