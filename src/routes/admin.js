@@ -7,6 +7,92 @@ import bcrypt from "bcryptjs";
 
 const router = express.Router();
 
+// Normalize incoming fields (accept case/hyphen variants)
+function normalizeUserPayload(input = {}) {
+  const out = { ...input };
+
+  // currency to uppercase among allowed
+  if (out.currency != null) {
+    const c = String(out.currency).toUpperCase();
+    const allowed = new Set(["THB", "INR", "USD"]);
+    out.currency = allowed.has(c) ? c : undefined;
+  }
+
+  // payFrequency mapping
+  if (out.payFrequency != null) {
+    const pf = String(out.payFrequency).toLowerCase();
+    const map = {
+      monthly: "Monthly",
+      week: "Weekly",
+      weekly: "Weekly",
+      day: "Daily",
+      daily: "Daily",
+      hour: "Hourly",
+      hourly: "Hourly",
+    };
+    out.payFrequency = map[pf] || undefined;
+  }
+
+  // employmentType mapping
+  if (out.employmentType != null) {
+    const et = String(out.employmentType).toLowerCase().replace(/\s+/g, " ");
+    const map = {
+      "full-time": "Full-time",
+      "full time": "Full-time",
+      "fulltime": "Full-time",
+      "part-time": "Part-time",
+      "part time": "Part-time",
+      "parttime": "Part-time",
+      contract: "Contract",
+      gig: "Gig / On-demand",
+      "on-demand": "Gig / On-demand",
+      "gig / on-demand": "Gig / On-demand",
+      "gig/on-demand": "Gig / On-demand",
+    };
+    out.employmentType = map[et] || undefined;
+  }
+
+  // numeric fields may arrive as strings
+  const toNum = (v) => (v === "" || v == null ? undefined : Number(v));
+  if ("baseSalary" in out) out.baseSalary = toNum(out.baseSalary);
+  if ("vat" in out) out.vat = toNum(out.vat);
+  if ("otRate" in out) out.otRate = toNum(out.otRate);
+  if ("allowances" in out) out.allowances = toNum(out.allowances);
+  if ("deductions" in out) out.deductions = toNum(out.deductions);
+
+  // effectiveFrom to Date
+  if (out.effectiveFrom != null) {
+    const d = new Date(out.effectiveFrom);
+    out.effectiveFrom = isNaN(d.getTime()) ? undefined : d;
+  }
+
+  // empty strings to undefined for text fields
+  ["taxId", "notes"].forEach((k) => {
+    if (k in out) {
+      const t = (out[k] ?? "").toString().trim();
+      out[k] = t === "" ? undefined : t;
+    }
+  });
+
+  // bank object cleanup
+  if (out.bank) {
+    const b = out.bank || {};
+    const clean = {
+      holder: b.holder?.toString().trim() || undefined,
+      account: b.account?.toString().trim() || undefined,
+      bankName: b.bankName?.toString().trim() || undefined,
+      ifsc: b.ifsc?.toString().trim() || undefined,
+    };
+    if (!clean.holder && !clean.account && !clean.bankName && !clean.ifsc) {
+      out.bank = undefined;
+    } else {
+      out.bank = clean;
+    }
+  }
+
+  return out;
+}
+
 /* -------------------------------------------
    Registration Requests (you already had these)
 -------------------------------------------- */
@@ -83,12 +169,63 @@ router.get("/users", auth, requireRole("superadmin"), async (_req, res) => {
   }
 });
 
-/** PATCH /api/admin/users/:id — update basic fields */
+/** GET /api/admin/users/:id — get full user details */
+router.get("/users/:id", auth, requireRole("superadmin"), async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id, { passwordHash: 0 }).lean();
+    if (!user) return res.status(404).json({ error: "Not found" });
+    res.json({
+      id: String(user._id),
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      status: user?.disabled ? "Inactive" : "Active",
+      currency: user.currency,
+      baseSalary: user.baseSalary,
+      payFrequency: user.payFrequency,
+      employmentType: user.employmentType,
+      vat: user.vat,
+      effectiveFrom: user.effectiveFrom,
+      otEligible: user.otEligible,
+      otRate: user.otRate,
+      allowances: user.allowances,
+      deductions: user.deductions,
+      taxId: user.taxId,
+      bank: user.bank,
+      notes: user.notes,
+    });
+  } catch (err) {
+    console.error("Get user error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+/** PATCH /api/admin/users/:id — update basic fields and payroll */
 router.patch("/users/:id", auth, requireRole("superadmin"), async (req, res) => {
   try {
-    const ALLOW = ["name", "email", "role", "disabled"];
+    const ALLOW = [
+      "name",
+      "email",
+      "role",
+      "disabled",
+      // payroll/salary fields
+      "currency",
+      "baseSalary",
+      "payFrequency",
+      "employmentType",
+      "vat",
+      "effectiveFrom",
+      "otEligible",
+      "otRate",
+      "allowances",
+      "deductions",
+      "taxId",
+      "bank",
+      "notes",
+    ];
     const updates = {};
     for (const k of ALLOW) if (k in req.body) updates[k] = req.body[k];
+    const normalized = normalizeUserPayload(updates);
 
     // Optional: very light role validation
     const ROLES = new Set(["superadmin", "rider", "cook", "supervisor", "refill"]);
@@ -98,7 +235,7 @@ router.patch("/users/:id", auth, requireRole("superadmin"), async (req, res) => 
 
     const user = await User.findByIdAndUpdate(
       req.params.id,
-      updates,
+      normalized,
       { new: true, runValidators: true, projection: { passwordHash: 0 } }
     ).lean();
 
@@ -112,6 +249,20 @@ router.patch("/users/:id", auth, requireRole("superadmin"), async (req, res) => 
         email: user.email,
         role: user.role,
         status: user?.disabled ? "Inactive" : "Active",
+        // echo payroll fields back
+        currency: user.currency,
+        baseSalary: user.baseSalary,
+        payFrequency: user.payFrequency,
+        employmentType: user.employmentType,
+        vat: user.vat,
+        effectiveFrom: user.effectiveFrom,
+        otEligible: user.otEligible,
+        otRate: user.otRate,
+        allowances: user.allowances,
+        deductions: user.deductions,
+        taxId: user.taxId,
+        bank: user.bank,
+        notes: user.notes,
       },
     });
   } catch (err) {
@@ -141,7 +292,25 @@ router.delete("/users/:id", auth, requireRole("superadmin"), async (req, res) =>
 
 router.post("/users", auth, requireRole("superadmin"), async (req, res) => {
   try {
-    const { name, email, role, password } = req.body;
+    const {
+      name,
+      email,
+      role,
+      password,
+      currency,
+      baseSalary,
+      payFrequency,
+      employmentType,
+      vat,
+      effectiveFrom,
+      otEligible,
+      otRate,
+      allowances,
+      deductions,
+      taxId,
+      bank,
+      notes,
+    } = req.body;
     if (!name || !email || !role || !password) {
       return res.status(400).json({ error: "name, email, role, password required" });
     }
@@ -155,7 +324,26 @@ router.post("/users", auth, requireRole("superadmin"), async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
 
-    const user = await User.create({ name, email, role, passwordHash });
+    const payroll = normalizeUserPayload({
+      currency,
+      baseSalary,
+      payFrequency,
+      employmentType,
+      vat,
+      effectiveFrom,
+      otEligible,
+      otRate,
+      allowances,
+      deductions,
+      taxId,
+      bank,
+      notes,
+    });
+
+    // Remove undefined keys to avoid overwriting defaults
+    Object.keys(payroll).forEach((k) => payroll[k] === undefined && delete payroll[k]);
+
+    const user = await User.create({ name, email, role, passwordHash, ...payroll });
 
     res.status(201).json({
       ok: true,
@@ -165,6 +353,19 @@ router.post("/users", auth, requireRole("superadmin"), async (req, res) => {
         email: user.email,
         role: user.role,
         status: user.disabled ? "Inactive" : "Active",
+        currency: user.currency,
+        baseSalary: user.baseSalary,
+        payFrequency: user.payFrequency,
+        employmentType: user.employmentType,
+        vat: user.vat,
+        effectiveFrom: user.effectiveFrom,
+        otEligible: user.otEligible,
+        otRate: user.otRate,
+        allowances: user.allowances,
+        deductions: user.deductions,
+        taxId: user.taxId,
+        bank: user.bank,
+        notes: user.notes,
       },
     });
   } catch (err) {

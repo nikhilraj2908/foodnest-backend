@@ -9,6 +9,28 @@ const UserSchema = new mongoose.Schema(
     name: { type: String, required: true, trim: true },
     role: { type: String, enum: roles, required: true },
     passwordHash: { type: String, required: true },
+    // Optional account status
+    disabled: { type: Boolean, default: false },
+
+    // Payroll / Salary fields (all optional)
+    currency: { type: String, enum: ["THB", "INR", "USD"], default: undefined },
+    baseSalary: { type: Number, default: undefined },
+    payFrequency: { type: String, enum: ["Monthly", "Weekly", "Daily", "Hourly"], default: undefined },
+    employmentType: { type: String, enum: ["Full-time", "Part-time", "Contract", "Gig / On-demand"], default: undefined },
+    vat: { type: Number, default: undefined },
+    effectiveFrom: { type: Date, default: undefined },
+    otEligible: { type: Boolean, default: undefined },
+    otRate: { type: Number, default: undefined },
+    allowances: { type: Number, default: undefined },
+    deductions: { type: Number, default: undefined },
+    taxId: { type: String, trim: true, default: undefined },
+    bank: {
+      holder: { type: String, trim: true, default: undefined },
+      account: { type: String, trim: true, default: undefined },
+      bankName: { type: String, trim: true, default: undefined },
+      ifsc: { type: String, trim: true, default: undefined },
+    },
+    notes: { type: String, trim: true, default: undefined },
   },
   { timestamps: true }
 );
