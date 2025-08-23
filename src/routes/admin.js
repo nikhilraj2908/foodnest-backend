@@ -98,6 +98,17 @@ function normalizeUserPayload(input = {}) {
    Registration Requests (you already had these)
 -------------------------------------------- */
 
+/** GET /api/admin/requests/count - get count of pending requests for notification */
+router.get("/requests/count", auth, requireRole("superadmin"), async (req, res) => {
+  try {
+    const count = await RegistrationRequest.countDocuments();
+    res.json({ count });
+  } catch (err) {
+    console.error("Count requests error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 /** GET /api/admin/requests */
 router.get("/requests", auth, requireRole("superadmin"), async (req, res) => {
   try {
