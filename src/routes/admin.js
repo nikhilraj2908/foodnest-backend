@@ -5,6 +5,7 @@ import { RegistrationRequest } from "../models/RegistrationRequest.js";
 import User from "../models/User.js"; // default export in your project
 import { encryptJson, decryptJson, maskAccountNumber } from "../utils/crypto.js";
 import bcrypt from "bcryptjs";
+import { sendApprovalEmail /*, sendDeclinedEmail*/ } from "../utils/mailer.js";
 
 const router = express.Router();
 
@@ -131,11 +132,21 @@ router.post("/requests/:id/approve", auth, requireRole("superadmin"), async (req
       return res.status(500).json({ error: "RegistrationRequest.approve() not implemented" });
     }
     const user = await doc.approve();
+        // Try sending the approval email; don't fail the API if email fails
+    let emailSent = false;
+    try {
+      const result = await sendApprovalEmail(user.email, user.name, user.role);
+      emailSent = !!result?.sent;
+    } catch (err) {
+      console.error("sendApprovalEmail error:", err);
+    }
 
-    res.json({
-      ok: true,
-      user: { id: String(user._id), email: user.email, name: user.name, role: user.role },
-    });
+    return res.json({ ok: true, emailSent, user: {
+      id: user._id,
+      email: user.email,
+      name: user.name,
+      role: user.role
+    }});
   } catch (err) {
     console.error("Approve request error:", err);
     res.status(500).json({ error: "Server error" });
@@ -149,6 +160,9 @@ router.post("/requests/:id/decline", auth, requireRole("superadmin"), async (req
     if (!doc) return res.status(404).json({ error: "Not found" });
     await doc.deleteOne();
     res.json({ ok: true });
+    await doc.deleteOne();
+    res.json({ok: true});
+
   } catch (err) {
     console.error("Decline request error:", err);
     res.status(500).json({ error: "Server error" });
