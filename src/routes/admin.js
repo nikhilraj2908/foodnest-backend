@@ -5,7 +5,7 @@ import { RegistrationRequest } from "../models/RegistrationRequest.js";
 import User from "../models/User.js"; // default export in your project
 import { encryptJson, decryptJson, maskAccountNumber } from "../utils/crypto.js";
 import bcrypt from "bcryptjs";
-import { sendApprovalEmail /*, sendDeclinedEmail*/ } from "../utils/mailer.js";
+import { sendApprovalEmail , sendDeclinedEmail } from "../utils/mailer.js";
 
 const router = express.Router();
 
@@ -158,16 +158,30 @@ router.post("/requests/:id/decline", auth, requireRole("superadmin"), async (req
   try {
     const doc = await RegistrationRequest.findById(req.params.id);
     if (!doc) return res.status(404).json({ error: "Not found" });
-    await doc.deleteOne();
-    res.json({ ok: true });
-    await doc.deleteOne();
-    res.json({ok: true});
 
+    const { email, name } = doc;
+
+    // delete pending request
+    await doc.deleteOne();
+
+    // try to send decline email (don’t fail API if email fails)
+    let emailSent = false;
+    try {
+      const result = await sendDeclinedEmail(email, name);
+      emailSent = !!result?.sent;
+    } catch (err) {
+      console.error("sendDeclinedEmail error:", err);
+    }
+
+    // send ONE response, at the end
+    return res.json({ ok: true, emailSent });
   } catch (err) {
     console.error("Decline request error:", err);
-    res.status(500).json({ error: "Server error" });
+    // send ONE error response
+    return res.status(500).json({ error: "Server error" });
   }
 });
+
 
 /* -----------------------------
    Users (for SuperAdmin screens)
