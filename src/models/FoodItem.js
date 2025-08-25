@@ -1,0 +1,19 @@
+import mongoose from "mongoose";
+
+const FoodItemSchema = new mongoose.Schema(
+  {
+    name:      { type: String, required: true, trim: true },
+    price:     { type: Number, required: true, min: 0 },
+    category:  { type: String, required: true, trim: true },
+    available: { type: Boolean, default: true },
+    tax:       { type: Number, default: 0, min: 0 },
+
+    // store both a public URL (served to client) and a relative path (easy to unlink on delete)
+    imageUrl:  { type: String, default: null },
+    imagePath: { type: String, default: null }, // e.g. "foods/1724567890_abc.jpg"
+  },
+  { timestamps: true }
+);
+
+export const FoodItem = mongoose.model("FoodItem", FoodItemSchema);
+export default FoodItem;

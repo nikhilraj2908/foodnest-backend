@@ -11,6 +11,9 @@ import { User } from "./models/User.js";
 import authRoutes from "./routes/auth.js";
 import adminRoutes from "./routes/admin.js";
 
+import path from "path";
+import foodsRoutes from "./routes/foods.js";
+
 
 const app = express();
 
@@ -25,6 +28,10 @@ app.use(
 app.use(helmet());
 app.use(express.json());
 app.use(morgan("dev"));
+
+app.use("/uploads", express.static(path.resolve("uploads")));
+
+app.use("/api/foods", foodsRoutes);
 
 // --- Basic routes ---
 app.get("/", (_req, res) => res.send("FoodNest API"));
