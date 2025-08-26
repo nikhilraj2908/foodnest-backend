@@ -6,6 +6,7 @@ import User from "../models/User.js"; // default export in your project
 import { encryptJson, decryptJson, maskAccountNumber } from "../utils/crypto.js";
 import bcrypt from "bcryptjs";
 import { sendApprovalEmail , sendDeclinedEmail } from "../utils/mailer.js";
+import { Team } from "../models/Team.js";
 
 const router = express.Router();
 
@@ -188,10 +189,12 @@ router.post("/requests/:id/decline", auth, requireRole("superadmin"), async (req
 ------------------------------ */
 
 /** GET /api/admin/users  — list all users (superadmin only) */
-router.get("/users", auth, requireRole("superadmin"), async (_req, res) => {
+router.get("/users", auth, requireRole("superadmin"), async (req, res) => {
   try {
     // Exclude passwordHash if present
-    const users = await User.find({}, { passwordHash: 0 }).sort({ createdAt: -1 }).lean();
+    const q = {};
+       if (req.query.role) q.role = req.query.role; // 'rider' | 'cook' | 'supervisor' | 'refill' | 'superadmin'
+       const users = await User.find(q, { passwordHash: 0 }).sort({ createdAt: -1 }).lean();
 
     const items = users.map((u) => ({
       id: String(u._id),
@@ -420,5 +423,91 @@ router.post("/users", auth, requireRole("superadmin"), async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+
+
+
+
+//Team management 
+
+/** GET /api/admin/teams — list teams (populated members) */
+router.get("/teams", auth, requireRole("superadmin"), async (_req, res) => {
+  try {
+    const teams = await Team.find({})
+      .sort({ createdAt: -1 })
+      .populate([
+        { path: "supervisors", select: "name email role" },
+        { path: "riders", select: "name email role" },
+        { path: "cooks", select: "name email role" },
+      ])
+      .lean();
+
+    // Shape for the app: names + ids, created date, (optional) routes count if you add later
+    const items = teams.map(t => ({
+      id: String(t._id),
+      name: t.name,
+      created: t.createdAt?.toISOString?.().slice(0,10),
+      routes: 0, // replace if you track routes
+      supervisors: t.supervisors?.map(u => ({ id: String(u._id), name: u.name, email: u.email })) || [],
+      riders: t.riders?.map(u => ({ id: String(u._id), name: u.name, email: u.email })) || [],
+      cooks: t.cooks?.map(u => ({ id: String(u._id), name: u.name, email: u.email })) || [],
+    }));
+
+    res.json({ items });
+  } catch (err) {
+    console.error("List teams error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+/** POST /api/admin/teams — create team */
+router.post("/teams", auth, requireRole("superadmin"), async (req, res) => {
+  try {
+    const { name, supervisors = [], riders = [], cooks = [] } = req.body;
+    if (!name?.trim()) return res.status(400).json({ error: "Team name required" });
+
+    const team = await Team.create({
+      name: name.trim(),
+      supervisors,
+      riders,
+      cooks,
+    });
+
+    res.status(201).json({ ok: true, id: String(team._id) });
+  } catch (err) {
+    if (err?.code === 11000) return res.status(409).json({ error: "Team name already exists" });
+    console.error("Create team error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+/** PATCH /api/admin/teams/:id — update team */
+router.patch("/teams/:id", auth, requireRole("superadmin"), async (req, res) => {
+  try {
+    const allow = ["name", "supervisors", "riders", "cooks"];
+    const update = {};
+    for (const k of allow) if (k in req.body) update[k] = req.body[k];
+
+    const team = await Team.findByIdAndUpdate(req.params.id, update, { new: true });
+    if (!team) return res.status(404).json({ error: "Not found" });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Update team error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+/** DELETE /api/admin/teams/:id — remove team */
+router.delete("/teams/:id", auth, requireRole("superadmin"), async (req, res) => {
+  try {
+    const team = await Team.findById(req.params.id);
+    if (!team) return res.status(404).json({ error: "Not found" });
+    await team.deleteOne();
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Delete team error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 
 export default router;
