@@ -1,96 +1,149 @@
+// src/routes/foods.js
 import express from "express";
 import path from "path";
 import fs from "fs";
 import { FoodItem } from "../models/FoodItem.js";
 import { uploadFoodImage, FOOD_UPLOAD_SUBDIR } from "../middleware/upload.js";
-// If you want to protect with JWT later, import auth and add it to routes.
-// import { auth } from "../middleware/auth.js";
 
 const router = express.Router();
 
-// helper to build absolute URL for a stored file
+// Build absolute URL for a stored file
 function makePublicUrl(req, relPath) {
+  // If you deploy behind a domain, set BASE_URL=https://api.yourdomain.com
   const base = process.env.BASE_URL || `${req.protocol}://${req.get("host")}`;
-  return `${base}/uploads/${relPath}`; // relPath like "foods/filename.jpg"
+  return `${base}/uploads/${relPath}`;
 }
 
-// GET /api/foods
+/**
+ * GET /api/foods
+ * Return all items. (You can paginate later.)
+ */
 router.get("/", async (_req, res) => {
-  const items = await FoodItem.find().sort({ createdAt: -1 }).lean();
-  res.json(items);
+  const docs = await FoodItem.find().sort({ createdAt: -1 }).lean();
+  res.json(docs);
 });
 
-// POST /api/foods  (multipart/form-data with fields + image)
-router.post("/", uploadFoodImage.single("image"), async (req, res) => {
-  try {
-    const { name, price, category, available = "true", tax = "0" } = req.body || {};
-    if (!name || !price || !category) {
-      return res.status(400).json({ error: "name, price, category are required" });
+/**
+ * POST /api/foods
+ * Create item (multipart). Image field name: "image"
+ */
+router.post(
+  
+  "/",
+  uploadFoodImage.single("image"),
+  async (req, res) => {
+    try {
+      const { name, price, category, available = true, tax = 0 } = req.body;
+
+      let imagePath = null;
+      let imageUrl = null;
+
+      if (req.file) {
+        // store relative path like "foods/file.jpg"
+        imagePath = path.posix.join(FOOD_UPLOAD_SUBDIR, req.file.filename);
+        imageUrl = makePublicUrl(req, imagePath);
+      }
+
+      const doc = await FoodItem.create({
+        name,
+        price,
+        category,
+        available: String(available) === "true" || available === true,
+        tax,
+        imagePath,
+        imageUrl,
+      });
+
+      res.status(201).json(doc);
+    } catch (e) {
+      console.error("Create food error:", e);
+      res.status(500).json({ error: "Failed to create food item" });
     }
 
-    const doc = new FoodItem({
-      name: String(name).trim(),
-      price: Number(price),
-      category: String(category).trim(),
-      available: String(available).toLowerCase() !== "false",
-      tax: Number(tax || 0),
-    });
+    console.log("CT:", req.headers["content-type"]);
+console.log("BODY KEYS:", Object.keys(req.body || {}));
+console.log("FILE:", req.file ? {
+  fieldname: req.file.fieldname,
+  originalname: req.file.originalname,
+  mimetype: req.file.mimetype,
+  size: req.file.size,
+  filename: req.file.filename
+} : "<none>");
 
-    if (req.file) {
-      const rel = `${FOOD_UPLOAD_SUBDIR}/${req.file.filename}`;
-      doc.imagePath = rel;
-      doc.imageUrl = makePublicUrl(req, rel);
-    }
-
-    await doc.save();
-    res.status(201).json(doc.toObject());
-  } catch (e) {
-    console.error("Create food error:", e);
-    res.status(500).json({ error: "Failed to create food item" });
   }
-});
 
-// PATCH /api/foods/:id  (JSON OR multipart if changing image)
-router.patch("/:id", uploadFoodImage.single("image"), async (req, res) => {
-  try {
-    const { id } = req.params;
-    const body = req.body || {};
-    const patch = {};
+  
+);
 
-    if (body.name != null) patch.name = String(body.name).trim();
-    if (body.price != null) patch.price = Number(body.price);
-    if (body.category != null) patch.category = String(body.category).trim();
-    if (body.tax != null) patch.tax = Number(body.tax);
-    if (body.available != null) patch.available = String(body.available).toLowerCase() !== "false";
-
-    if (req.file) {
-      // replace image
-      const rel = `${FOOD_UPLOAD_SUBDIR}/${req.file.filename}`;
-      patch.imagePath = rel;
-      // build absolute URL
-      patch.imageUrl = makePublicUrl(req, rel);
+/**
+ * PATCH /api/foods/:id
+ * Update item. Accepts either JSON or multipart with optional "image".
+ */
+router.patch(
+  "/:id",
+  (req, res, next) => {
+    // If Content-Type is multipart, run multer; else skip
+    const ct = req.headers["content-type"] || "";
+    if (ct.startsWith("multipart/form-data")) {
+      return uploadFoodImage.single("image")(req, res, next);
     }
+    next();
+  },
+  async (req, res) => {
+    try {
+      const id = req.params.id;
+      const doc = await FoodItem.findById(id);
+      if (!doc) return res.status(404).json({ error: "Not found" });
 
-    const updated = await FoodItem.findByIdAndUpdate(id, patch, { new: true }).lean();
-    if (!updated) return res.status(404).json({ error: "Not found" });
-    res.json(updated);
-  } catch (e) {
-    console.error("Update food error:", e);
-    res.status(500).json({ error: "Failed to update food item" });
+      const fields = {};
+      if (typeof req.body.name !== "undefined") fields.name = req.body.name;
+      if (typeof req.body.price !== "undefined") fields.price = req.body.price;
+      if (typeof req.body.category !== "undefined") fields.category = req.body.category;
+      if (typeof req.body.tax !== "undefined") fields.tax = req.body.tax;
+      if (typeof req.body.available !== "undefined") {
+        fields.available = String(req.body.available) === "true" || req.body.available === true;
+      }
+
+      // If a new file was uploaded, delete old file and set new paths
+      if (req.file) {
+        const newRel = path.posix.join(FOOD_UPLOAD_SUBDIR, req.file.filename);
+        const newUrl = makePublicUrl(req, newRel);
+
+        if (doc.imagePath) {
+          const absOld = path.resolve("uploads", doc.imagePath);
+          fs.promises.unlink(absOld).catch(() => {});
+        }
+
+        fields.imagePath = newRel;
+        fields.imageUrl = newUrl;
+      }
+
+      Object.assign(doc, fields);
+      await doc.save();
+
+      res.json(doc);
+    } catch (e) {
+      console.error("Update food error:", e);
+      res.status(500).json({ error: "Failed to update food item" });
+    }
   }
-});
+);
 
-// DELETE /api/foods/:id
+/**
+ * DELETE /api/foods/:id
+ * Remove doc + physical file
+ */
 router.delete("/:id", async (req, res) => {
   try {
-    const doc = await FoodItem.findByIdAndDelete(req.params.id).lean();
+    const id = req.params.id;
+    const doc = await FoodItem.findByIdAndDelete(id);
     if (!doc) return res.status(404).json({ error: "Not found" });
 
-    // try to delete file if present
-    if (doc.imagePath) {
+    if (doc?.imagePath) {
       const abs = path.resolve("uploads", doc.imagePath);
       fs.promises.unlink(abs).catch(() => {});
     }
+
     res.json({ ok: true });
   } catch (e) {
     console.error("Delete food error:", e);
