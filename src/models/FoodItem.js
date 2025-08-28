@@ -9,6 +9,14 @@ const RawMaterialSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const QuantitySchema = new mongoose.Schema(
+  {
+    amount: {type: Number, min: 0},
+    unit: { type: String, trim: true}
+  },
+  {_id: false}
+)
+
 const FoodItemSchema = new mongoose.Schema(
   {
     name:      { type: String, required: true, trim: true },
@@ -20,7 +28,10 @@ const FoodItemSchema = new mongoose.Schema(
     // store both a public URL (served to client) and a relative path (easy to unlink on delete)
     imageUrl:  { type: String, default: null },
     imagePath: { type: String, default: null }, // e.g. "foods/1724567890_abc.jpg"
-    rawMaterials: {type: [RawMaterialSchema], default: []}
+    rawMaterials: {type: [RawMaterialSchema], default: []},
+    totalQuantity: { type: QuantitySchema, default: undefined },
+perServing:    { type: QuantitySchema, default: undefined },
+
   },
   { timestamps: true }
 );
