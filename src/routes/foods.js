@@ -7,12 +7,30 @@ import { uploadFoodImage, FOOD_UPLOAD_SUBDIR } from "../middleware/upload.js";
 
 const router = express.Router();
 
+
+
+
 // Build absolute URL for a stored file
 function makePublicUrl(req, relPath) {
   // If you deploy behind a domain, set BASE_URL=https://api.yourdomain.com
   const base = process.env.BASE_URL || `${req.protocol}://${req.get("host")}`;
   return `${base}/uploads/${relPath}`;
 }
+
+// --- NEW: safely parse rawMaterials from JSON or string (multipart) ---
+function parseRawMaterials(input) {
+  if (!input) return [];
+  if (typeof input === "string") {
+    try {
+      const parsed = JSON.parse(input);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return Array.isArray(input) ? input : [];
+}
+
 
 /**
  * GET /api/foods
@@ -52,6 +70,7 @@ router.post(
         tax,
         imagePath,
         imageUrl,
+        rawMaterials,
       });
 
       res.status(201).json(doc);
@@ -103,6 +122,13 @@ router.patch(
       if (typeof req.body.available !== "undefined") {
         fields.available = String(req.body.available) === "true" || req.body.available === true;
       }
+
+            // NEW: allow updating rawMaterials (works for JSON or multipart)
+            if (typeof req.body.rawMaterials !== "undefined") {
+              fields.rawMaterials = parseRawMaterials(req.body.rawMaterials);
+            }
+      
+      
 
       // If a new file was uploaded, delete old file and set new paths
       if (req.file) {
