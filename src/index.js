@@ -14,6 +14,11 @@ import adminRoutes from "./routes/admin.js";
 import path from "path";
 import foodsRoutes from "./routes/foods.js";
 
+import usersRoutes from "./routes/users.js";
+import prepRequestsRoutes from "./routes/prepRequests.js";
+import { auth } from "./middleware/auth.js";
+
+
 
 const app = express();
 
@@ -32,6 +37,13 @@ app.use(morgan("dev"));
 app.use("/uploads", express.static(path.resolve("uploads")));
 
 app.use("/api/foods", foodsRoutes);
+
+// List users (for cooks dropdown)
+app.use("/api/users", auth, usersRoutes);
+
+// Prep requests (assignments Supervisor/Superadmin -> Cook)
+app.use("/api/prep-requests", auth, prepRequestsRoutes);
+
 
 // --- Basic routes ---
 app.get("/", (_req, res) => res.send("FoodNest API"));

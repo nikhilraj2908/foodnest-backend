@@ -189,7 +189,7 @@ router.post("/requests/:id/decline", auth, requireRole("superadmin"), async (req
 ------------------------------ */
 
 /** GET /api/admin/users  — list all users (superadmin only) */
-router.get("/users", auth, requireRole("superadmin"), async (req, res) => {
+router.get("/users", auth, requireRole("superadmin", "supervisor"), async (req, res) => {
   try {
     // Exclude passwordHash if present
     const q = {};
