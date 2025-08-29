@@ -97,4 +97,30 @@ router.patch("/:id", async (req, res) => {
   }
 });
 
+// DELETE /api/prep-requests/:id
+// Allowed: the assigned cook OR supervisor/superadmin
+router.delete("/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+    const me = req.user; // set by your auth middleware
+
+    const doc = await PrepRequest.findById(id).lean();
+    if (!doc) return res.status(404).json({ error: "Not found" });
+
+    const isSupervisor = me?.role === "supervisor" || me?.role === "superadmin";
+    const isAssignedCook = String(doc.cookId) === String(me?.id);
+
+    if (!isSupervisor && !isAssignedCook) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    await PrepRequest.findByIdAndDelete(id);
+    res.json({ ok: true, deletedId: id });
+  } catch (e) {
+    console.error("Delete prep request error:", e);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+
 export default router;
