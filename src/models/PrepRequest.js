@@ -36,7 +36,7 @@ const PrepRequestSchema = new mongoose.Schema(
     },
 
     cookId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-    requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true }, // supervisor/superadmin
+    requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true }, 
 
     status: { type: String, enum: ["queued", "processing", "ready", "picked"], default: "queued" },
     quantityToPrepare: { type: Number, default: 0 },

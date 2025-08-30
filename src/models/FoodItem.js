@@ -3,8 +3,8 @@ import mongoose from "mongoose";
 const RawMaterialSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
-    qty: { type: Number },             // optional
-    unit: { type: String, trim: true } // optional (kg, g, ml, tbsp, etc.)
+    qty: { type: Number },            
+    unit: { type: String, trim: true } 
   },
   { _id: false }
 );
@@ -25,9 +25,9 @@ const FoodItemSchema = new mongoose.Schema(
     available: { type: Boolean, default: true },
     tax:       { type: Number, default: 0, min: 0 },
 
-    // store both a public URL (served to client) and a relative path (easy to unlink on delete)
+
     imageUrl:  { type: String, default: null },
-    imagePath: { type: String, default: null }, // e.g. "foods/1724567890_abc.jpg"
+    imagePath: { type: String, default: null },
     rawMaterials: {type: [RawMaterialSchema], default: []},
     totalQuantity: { type: QuantitySchema, default: undefined },
 perServing:    { type: QuantitySchema, default: undefined },

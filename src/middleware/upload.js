@@ -43,7 +43,7 @@ function fileFilter(_req, file, cb) {
 export const uploadFoodImage = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  limits: { fileSize: 10 * 1024 * 1024 }, 
 });
 
-export const FOOD_UPLOAD_SUBDIR = FOOD_SUBDIR; // "foods"
+export const FOOD_UPLOAD_SUBDIR = FOOD_SUBDIR; 
