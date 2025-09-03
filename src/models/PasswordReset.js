@@ -6,10 +6,10 @@ const { Schema } = mongoose;
 const PasswordResetSchema = new Schema(
   {
     email: { type: String, required: true, index: true, lowercase: true, trim: true },
-    code: { type: String, required: true },        // store as string "123456"
+    code: { type: String, required: true },     
     expiresAt: { type: Date, required: true },
-    attempts: { type: Number, default: 0 },        // verification attempts
-    consumed: { type: Boolean, default: false },   // true once used to reset
+    attempts: { type: Number, default: 0 },       
+    consumed: { type: Boolean, default: false },  
   },
   { timestamps: true }
 );
