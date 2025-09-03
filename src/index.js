@@ -17,6 +17,7 @@ import foodsRoutes from "./routes/foods.js";
 import usersRoutes from "./routes/users.js";
 import prepRequestsRoutes from "./routes/prepRequests.js";
 import { auth } from "./middleware/auth.js";
+import combosRoutes from "./routes/combos.js";
 
 
 
@@ -43,6 +44,7 @@ app.use("/api/users", auth, usersRoutes);
 
 // Prep requests (assignments Supervisor/Superadmin -> Cook)
 app.use("/api/prep-requests", auth, prepRequestsRoutes);
+app.use("/api/combos", combosRoutes);
 
 
 // --- Basic routes ---
