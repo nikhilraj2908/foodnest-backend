@@ -43,6 +43,11 @@ router.post("/", permit("supervisor", "superadmin"), async (req, res) => {
         perServing: food.perServing || undefined,
       },
     });
+        // return populated so the supervisor list updates immediately with names
+        const created = await PrepRequest.findById(doc._id)
+        .populate("requestedBy", "name email")
+        .populate("cookId", "name email")
+        .lean();
 
     res.status(201).json(doc);
   } catch (e) {
@@ -57,12 +62,18 @@ router.post("/", permit("supervisor", "superadmin"), async (req, res) => {
  */
 router.get("/", async (req, res) => {
   try {
-    const { cookId, status } = req.query;
     const q = {};
-    if (cookId) q.cookId = cookId;
-    if (status) q.status = status;
+    if (req.query.cookId) q.cookId = req.query.cookId;
+    if (req.query.createdBy) q.requestedBy = req.query.createdBy;
+    if (req.query.status) q.status = req.query.status;
 
-    const rows = await PrepRequest.find(q).sort({ createdAt: -1 }).lean();
+    // IMPORTANT: populate both sides so UI can show names/emails
+    const rows = await PrepRequest.find(q)
+      .sort({ createdAt: -1 })
+      .populate("requestedBy", "name email")  // <— show supervisor
+      .populate("cookId", "name email")       // <— show cook
+      .lean();
+
     res.json(rows);
   } catch (e) {
     console.error("List prep requests error:", e);
@@ -91,6 +102,22 @@ router.patch("/:id", async (req, res) => {
     if (!doc) return res.status(404).json({ error: "Not found" });
 
     res.json(doc);
+
+    const updated = await PrepRequest.findByIdAndUpdate(
+      id,
+      {
+        ...(status ? { status } : {}),
+        ...(notes !== undefined ? { notes } : {}),
+        ...(typeof quantityToPrepare === "number" ? { quantityToPrepare } : {}),
+      },
+      { new: true }
+    )
+      .populate("requestedBy", "name email")
+      .populate("cookId", "name email")
+      .lean();
+
+    if (!updated) return res.status(404).json({ error: "Not found" });
+    res.json(updated);
   } catch (e) {
     console.error("Update prep request error:", e);
     res.status(500).json({ error: "Server error" });

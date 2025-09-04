@@ -21,6 +21,7 @@ const QuantitySchema = new mongoose.Schema(
 const PrepRequestSchema = new mongoose.Schema(
   {
     foodId: { type: mongoose.Schema.Types.ObjectId, ref: "FoodItem", required: true },
+    
 
     // immutable snapshot of the food card at the time of sending
     foodSnapshot: {
@@ -44,6 +45,10 @@ const PrepRequestSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+PrepRequestSchema.index({ cookId: 1, status: 1, createdAt: -1 });
+PrepRequestSchema.index({ requestedBy: 1, createdAt: -1 });
+
 
 export const PrepRequest = mongoose.model("PrepRequest", PrepRequestSchema);
 export default PrepRequest;
