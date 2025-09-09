@@ -8,8 +8,7 @@ const TeamSchema = new Schema(
     supervisors: [{ type: Schema.Types.ObjectId, ref: "User" }],
     riders: [{ type: Schema.Types.ObjectId, ref: "User" }],
     cooks: [{ type: Schema.Types.ObjectId, ref: "User" }],
-    // OPTIONAL: if you later want to link actual delivery routes, add e.g.
-    // routes: [{ type: Schema.Types.ObjectId, ref: "Route" }]
+
   },
   { timestamps: true }
 );
